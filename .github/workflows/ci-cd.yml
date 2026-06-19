@@ -1,0 +1,254 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true      # cancel stale PR runs when new commits arrive
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # e.g. your-org/ai-support-platform
+  PYTHON_VERSION: "3.11"
+
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+
+  # ── 1. Lint ─────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install lint tools
+        run: pip install ruff mypy types-passlib
+
+      - name: ruff check
+        run: ruff check app/ scripts/ --output-format=github
+
+      - name: ruff format check
+        run: ruff format app/ scripts/ --check
+
+      - name: mypy (strict on core modules)
+        run: mypy app/core/ app/schemas/ --ignore-missing-imports
+
+  # ── 2. Test ──────────────────────────────────────────────────────────────────
+  test:
+    name: Unit + Integration tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: support_user
+          POSTGRES_PASSWORD: support_pass
+          POSTGRES_DB: support_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U support_user"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://support_user:support_pass@localhost:5432/support_db
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      GROQ_API_KEY: stub          # tests mock the LLM client
+      PINECONE_API_KEY: stub
+      APP_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: |
+          pytest tests/ \
+            --tb=short \
+            --asyncio-mode=auto \
+            -v \
+            --junitxml=test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
+
+  # ── 3. Offline eval (regression gate) ───────────────────────────────────────
+  eval:
+    name: Offline eval (routing accuracy gate)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'   # only on direct pushes, not every PR
+
+    env:
+      DATABASE_URL: sqlite:///./eval.db    # lightweight for eval
+      SECRET_KEY: ci-eval-secret
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+      MLFLOW_TRACKING_URI: ./mlruns        # local filesystem — no server needed
+      APP_ENV: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run offline evaluation
+        run: python scripts/run_offline_eval.py
+        # Script exits non-zero if routing accuracy < 70% (see scripts/run_offline_eval.py)
+
+      - name: Upload MLflow artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-eval-run
+          path: mlruns/
+
+  # ── 4. Build & push Docker image ─────────────────────────────────────────────
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image-digest: ${{ steps.push.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Output image info
+        run: |
+          echo "### Docker Image Built 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** ${{ steps.push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+
+  # ── 5. Deploy to Kubernetes ───────────────────────────────────────────────────
+  deploy:
+    name: Deploy to K8s
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://api.your-domain.com/docs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.30.0"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Apply namespace + config
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+
+      - name: Update image tag in deployment
+        run: |
+          # Patch the deployment image to the exact SHA digest produced by the build job
+          kubectl set image deployment/ai-support-api \
+            api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
+            -n ai-support
+
+      - name: Apply remaining manifests
+        run: |
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/hpa.yaml
+          kubectl apply -f k8s/ingress.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/ai-support-api \
+            -n ai-support \
+            --timeout=180s
+
+      - name: Smoke test (readiness probe)
+        run: |
+          # Port-forward for a quick smoke test without exposing the cluster
+          kubectl port-forward svc/ai-support-api-svc 8080:80 -n ai-support &
+          sleep 5
+          curl -sf http://localhost:8080/health || (echo "Smoke test failed" && exit 1)
+          curl -sf http://localhost:8080/ready  || (echo "Readiness check failed" && exit 1)
+          echo "✅ Deployment smoke test passed"
+
+      - name: Deployment summary
+        run: |
+          echo "### Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ai-support >> $GITHUB_STEP_SUMMARY
