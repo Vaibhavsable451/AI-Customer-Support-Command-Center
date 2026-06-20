@@ -70,6 +70,7 @@ jobs:
       GROQ_API_KEY: stub          # tests mock the LLM client
       PINECONE_API_KEY: stub
       APP_ENV: test
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +112,7 @@ jobs:
       PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
       MLFLOW_TRACKING_URI: ./mlruns        # local filesystem — no server needed
       APP_ENV: ci
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - uses: actions/checkout@v4
