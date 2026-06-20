@@ -22,6 +22,8 @@ ENV/
 *.local
 *.local.*
 secrets.local.yaml
+kubeconfig*.txt
+*.kubeconfig
 
 # Local app/runtime data
 mlruns/

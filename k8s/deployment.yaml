@@ -63,13 +63,11 @@ spec:
                 secretKeyRef:
                   name: ai-support-secrets
                   key: PINECONE_API_KEY
-            - name: POSTGRES_PASSWORD
+            - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: ai-support-secrets
-                  key: POSTGRES_PASSWORD
-            - name: DATABASE_URL
-              value: "postgresql://support_user:$(POSTGRES_PASSWORD)@postgres-svc:5432/support_db"
+                  key: DATABASE_URL
 
           # ── Probes ─────────────────────────────────────────────────────────
           livenessProbe:
