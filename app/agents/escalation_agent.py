@@ -4,6 +4,7 @@ frustrated/angry customers, legal threats, repeated unresolved issues,
 or explicit requests for a human. Produces an empathetic holding response
 and flags the ticket for human handoff.
 """
+
 from app.agents.state import AgentState
 from app.core.logging import get_logger
 from app.services.llm_client import get_llm_client
@@ -35,7 +36,13 @@ def escalation_node(state: AgentState) -> AgentState:
     )
 
     trace = state.get("trace", [])
-    trace.append({"agent": "escalation", "action": "handoff_to_human", "detail": "ticket flagged"})
+    trace.append(
+        {
+            "agent": "escalation",
+            "action": "handoff_to_human",
+            "detail": "ticket flagged",
+        }
+    )
 
     logger.info("escalation_triggered", ticket_id=state.get("ticket_id"))
 

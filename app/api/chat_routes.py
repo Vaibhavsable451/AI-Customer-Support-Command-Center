@@ -3,6 +3,7 @@ Chat routes — the main customer-facing endpoint. Takes a user message tied
 to a ticket, runs it through the multi-agent LangGraph pipeline, persists
 the conversation, and returns the agent's response.
 """
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -50,7 +51,10 @@ def chat(
 
     # Build conversation history for the agent (last 10 messages)
     history = [
-        {"role": "user" if m.sender_type == SenderType.USER else "assistant", "content": m.content}
+        {
+            "role": "user" if m.sender_type == SenderType.USER else "assistant",
+            "content": m.content,
+        }
         for m in conversation.messages[-10:]
     ]
 

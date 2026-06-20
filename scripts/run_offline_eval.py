@@ -12,6 +12,7 @@ Run this:
 Usage:
     python scripts/run_offline_eval.py
 """
+
 import json
 import sys
 import time
@@ -29,7 +30,9 @@ from app.services.prompt_registry import get_all_prompt_versions  # noqa: E402
 configure_logging()
 logger = get_logger(__name__)
 
-DATASET_PATH = Path(__file__).resolve().parent.parent / "tests" / "golden_eval_dataset.json"
+DATASET_PATH = (
+    Path(__file__).resolve().parent.parent / "tests" / "golden_eval_dataset.json"
+)
 
 
 def load_golden_dataset() -> list[dict]:
@@ -40,15 +43,25 @@ def load_golden_dataset() -> list[dict]:
 def evaluate_single_case(case: dict) -> dict:
     """Run one golden example through the pipeline and score the outcome."""
     start = time.time()
-    result = run_agent_pipeline(ticket_id=f"eval-{case['id']}", user_message=case["question"])
+    result = run_agent_pipeline(
+        ticket_id=f"eval-{case['id']}", user_message=case["question"]
+    )
     elapsed_ms = int((time.time() - start) * 1000)
 
-    actual_route = result.get("route") or _infer_route_from_agent(result.get("agent_used", ""))
+    actual_route = result.get("route") or _infer_route_from_agent(
+        result.get("agent_used", "")
+    )
     route_correct = actual_route == case["expected_route"]
 
     response_lower = result.get("final_response", "").lower()
-    keywords_hit = sum(1 for kw in case["expected_keywords"] if kw.lower() in response_lower)
-    keyword_coverage = keywords_hit / len(case["expected_keywords"]) if case["expected_keywords"] else 0.0
+    keywords_hit = sum(
+        1 for kw in case["expected_keywords"] if kw.lower() in response_lower
+    )
+    keyword_coverage = (
+        keywords_hit / len(case["expected_keywords"])
+        if case["expected_keywords"]
+        else 0.0
+    )
 
     return {
         "id": case["id"],
@@ -84,7 +97,9 @@ def run_evaluation_suite() -> dict:
     aggregate = {
         "total_cases": n,
         "routing_accuracy": round(sum(r["route_correct"] for r in results) / n, 3),
-        "avg_keyword_coverage": round(sum(r["keyword_coverage"] for r in results) / n, 3),
+        "avg_keyword_coverage": round(
+            sum(r["keyword_coverage"] for r in results) / n, 3
+        ),
         "avg_confidence": round(sum(r["confidence_score"] for r in results) / n, 3),
         "avg_latency_ms": round(sum(r["latency_ms"] for r in results) / n, 1),
         "escalation_rate": round(sum(r["escalated"] for r in results) / n, 3),
@@ -120,8 +135,10 @@ def main():
     print("\n=== Per-case breakdown ===")
     for r in eval_output["results"]:
         status = "✅" if r["route_correct"] else "❌"
-        print(f"  {status} [{r['id']}] expected={r['expected_route']} actual={r['actual_route']} "
-              f"keyword_coverage={r['keyword_coverage']} latency={r['latency_ms']}ms")
+        print(
+            f"  {status} [{r['id']}] expected={r['expected_route']} actual={r['actual_route']} "
+            f"keyword_coverage={r['keyword_coverage']} latency={r['latency_ms']}ms"
+        )
 
     try:
         log_eval_run_to_mlflow(eval_output)

@@ -2,6 +2,7 @@
 Pinecone vector store wrapper — handles index creation, upsert (ingest),
 and similarity-search (retrieval) for the RAG pipeline.
 """
+
 from functools import lru_cache
 
 from pinecone import Pinecone, ServerlessSpec
@@ -70,7 +71,9 @@ class VectorStore:
         top_k = top_k or settings.max_retrieval_docs
         query_vector = self.embedder.embed_text(query_text)
 
-        filter_dict = {"category": {"$eq": category_filter}} if category_filter else None
+        filter_dict = (
+            {"category": {"$eq": category_filter}} if category_filter else None
+        )
 
         results = self.index.query(
             vector=query_vector,
@@ -83,16 +86,23 @@ class VectorStore:
         matches = []
         for match in results.get("matches", []):
             metadata = match.get("metadata", {})
-            matches.append({
-                "text": metadata.get("text", ""),
-                "score": match.get("score", 0.0),
-                "source": metadata.get("title", "unknown"),
-                "metadata": metadata,
-            })
+            matches.append(
+                {
+                    "text": metadata.get("text", ""),
+                    "score": match.get("score", 0.0),
+                    "source": metadata.get("title", "unknown"),
+                    "metadata": metadata,
+                }
+            )
 
         # Filter out low-confidence matches
         filtered = [m for m in matches if m["score"] >= settings.similarity_threshold]
-        logger.info("retrieval_complete", query=query_text[:80], total_matches=len(matches), kept=len(filtered))
+        logger.info(
+            "retrieval_complete",
+            query=query_text[:80],
+            total_matches=len(matches),
+            kept=len(filtered),
+        )
         return filtered or matches[:2]  # fallback: return top 2 even if below threshold
 
 

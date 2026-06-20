@@ -2,6 +2,7 @@
 Embedding service — wraps a sentence-transformers model to convert text into
 dense vectors for semantic search in Pinecone.
 """
+
 from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
@@ -27,7 +28,9 @@ class EmbeddingService:
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed multiple strings efficiently in a single batch."""
-        vectors = self.model.encode(texts, normalize_embeddings=True, batch_size=32, show_progress_bar=False)
+        vectors = self.model.encode(
+            texts, normalize_embeddings=True, batch_size=32, show_progress_bar=False
+        )
         return vectors.tolist()
 
 

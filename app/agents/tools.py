@@ -4,6 +4,7 @@ In a real deployment these would hit actual internal APIs (billing system,
 account service, etc). Here they're stubbed with realistic mock logic so
 the architecture is demonstrable end-to-end.
 """
+
 import random
 
 
@@ -30,7 +31,7 @@ def check_recent_payment(ticket_id: str) -> str:
 
 def create_refund_request(ticket_id: str, amount: float) -> str:
     """Simulate creating a refund request for the billing team."""
-    return f"Refund request of ${amount:.2f} created for ticket {ticket_id}. Reference: REF-{random.randint(10000,99999)}."
+    return f"Refund request of ${amount:.2f} created for ticket {ticket_id}. Reference: REF-{random.randint(10000, 99999)}."
 
 
 TOOL_REGISTRY = {

@@ -2,6 +2,7 @@
 Retriever service — the main entry point the agents call to get relevant
 knowledge-base context for a user query.
 """
+
 from app.core.logging import get_logger
 from app.rag.vector_store import get_vector_store
 from app.schemas.schemas import RetrievedChunk
@@ -20,7 +21,9 @@ class Retriever:
         category_filter: str | None = None,
     ) -> list[RetrievedChunk]:
         """Retrieve top-k relevant chunks for a query from the knowledge base."""
-        raw_matches = self.store.query(query, top_k=top_k, category_filter=category_filter)
+        raw_matches = self.store.query(
+            query, top_k=top_k, category_filter=category_filter
+        )
         return [
             RetrievedChunk(
                 text=m["text"],
@@ -38,7 +41,9 @@ class Retriever:
 
         blocks = []
         for i, c in enumerate(chunks, 1):
-            blocks.append(f"[Source {i}: {c.source} | relevance={c.score:.2f}]\n{c.text}")
+            blocks.append(
+                f"[Source {i}: {c.source} | relevance={c.score:.2f}]\n{c.text}"
+            )
         return "\n\n".join(blocks)
 
 

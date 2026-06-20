@@ -3,6 +3,7 @@ Support Agent — handles technical/account troubleshooting.
 Uses RAG context PLUS a small set of "tools" (simulated account lookup,
 diagnostic checks) to provide actionable troubleshooting steps.
 """
+
 from app.agents.state import AgentState
 from app.agents.tools import TOOL_REGISTRY, get_tool_descriptions
 from app.core.logging import get_logger
@@ -41,8 +42,13 @@ def support_node(state: AgentState) -> AgentState:
 
     # Simple heuristic tool invocation: check account status if relevant keywords appear
     tool_output = ""
-    if any(kw in query.lower() for kw in ["account", "login", "locked", "access", "subscription"]):
-        result = TOOL_REGISTRY["check_account_status"](ticket_id=state.get("ticket_id", "unknown"))
+    if any(
+        kw in query.lower()
+        for kw in ["account", "login", "locked", "access", "subscription"]
+    ):
+        result = TOOL_REGISTRY["check_account_status"](
+            ticket_id=state.get("ticket_id", "unknown")
+        )
         tool_output = f"\n\n[Tool Result — check_account_status]: {result}"
 
     system_prompt = SUPPORT_SYSTEM_PROMPT.format(tools=tools_desc, context=context)
@@ -59,7 +65,13 @@ def support_node(state: AgentState) -> AgentState:
     sources = list({c.source for c in chunks})
 
     trace = state.get("trace", [])
-    trace.append({"agent": "support", "action": "troubleshoot", "detail": f"tool_used={bool(tool_output)}"})
+    trace.append(
+        {
+            "agent": "support",
+            "action": "troubleshoot",
+            "detail": f"tool_used={bool(tool_output)}",
+        }
+    )
 
     return {
         **state,

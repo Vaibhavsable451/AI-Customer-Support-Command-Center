@@ -2,6 +2,7 @@
 Structured logging configuration.
 Produces JSON logs in production, pretty console logs in development.
 """
+
 import logging
 import sys
 
@@ -25,7 +26,8 @@ def configure_logging() -> None:
         renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     structlog.configure(
-        processors=shared_processors + [
+        processors=shared_processors
+        + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -34,7 +36,10 @@ def configure_logging() -> None:
     )
 
     formatter = structlog.stdlib.ProcessorFormatter(
-        processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer],
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            renderer,
+        ],
     )
 
     handler = logging.StreamHandler(sys.stdout)

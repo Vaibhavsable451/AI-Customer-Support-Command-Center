@@ -2,6 +2,7 @@
 Knowledge Base routes — admin-only endpoints to ingest documents into
 the Pinecone vector store for RAG retrieval.
 """
+
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_admin
@@ -27,7 +28,9 @@ def ingest_document(
         metadata=payload.metadata,
     )
     count = store.upsert_chunks(records)
-    return KBIngestResponse(chunks_ingested=count, document_ids=[r["id"] for r in records])
+    return KBIngestResponse(
+        chunks_ingested=count, document_ids=[r["id"] for r in records]
+    )
 
 
 @router.post("/ingest-bulk", response_model=KBIngestResponse)
@@ -40,7 +43,14 @@ def ingest_bulk(
     all_records = []
     for doc in payloads:
         all_records.extend(
-            build_chunk_records(title=doc.title, content=doc.content, category=doc.category, metadata=doc.metadata)
+            build_chunk_records(
+                title=doc.title,
+                content=doc.content,
+                category=doc.category,
+                metadata=doc.metadata,
+            )
         )
     count = store.upsert_chunks(all_records)
-    return KBIngestResponse(chunks_ingested=count, document_ids=[r["id"] for r in all_records])
+    return KBIngestResponse(
+        chunks_ingested=count, document_ids=[r["id"] for r in all_records]
+    )

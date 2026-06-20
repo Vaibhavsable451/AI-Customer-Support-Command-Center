@@ -1,6 +1,7 @@
 """
 Auth routes — user registration and login (JWT issuance).
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -35,5 +36,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
-    token = create_access_token(subject=user.id, extra_claims={"is_admin": user.is_admin})
+    token = create_access_token(
+        subject=user.id, extra_claims={"is_admin": user.is_admin}
+    )
     return Token(access_token=token)

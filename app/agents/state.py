@@ -2,6 +2,7 @@
 Shared agent state — passed between nodes in the LangGraph state graph.
 Every agent reads from and writes to this single state object.
 """
+
 from typing import TypedDict
 
 

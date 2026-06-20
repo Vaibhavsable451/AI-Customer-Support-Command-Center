@@ -1,6 +1,7 @@
 """
 ORM models: User, Ticket, Conversation, Message, AgentRun.
 """
+
 import enum
 import uuid
 from datetime import datetime
@@ -41,7 +42,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=False
+    )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -57,14 +60,22 @@ class Ticket(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    status: Mapped[TicketStatus] = mapped_column(Enum(TicketStatus), default=TicketStatus.OPEN)
-    priority: Mapped[TicketPriority] = mapped_column(Enum(TicketPriority), default=TicketPriority.MEDIUM)
+    status: Mapped[TicketStatus] = mapped_column(
+        Enum(TicketStatus), default=TicketStatus.OPEN
+    )
+    priority: Mapped[TicketPriority] = mapped_column(
+        Enum(TicketPriority), default=TicketPriority.MEDIUM
+    )
     category: Mapped[str] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
 
     user: Mapped["User"] = relationship(back_populates="tickets")
-    conversation: Mapped["Conversation"] = relationship(back_populates="ticket", uselist=False)
+    conversation: Mapped["Conversation"] = relationship(
+        back_populates="ticket", uselist=False
+    )
 
 
 class Conversation(Base):
@@ -75,14 +86,18 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     ticket: Mapped["Ticket"] = relationship(back_populates="conversation")
-    messages: Mapped[list["Message"]] = relationship(back_populates="conversation", order_by="Message.created_at")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation", order_by="Message.created_at"
+    )
 
 
 class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False
+    )
     sender_type: Mapped[SenderType] = mapped_column(Enum(SenderType), nullable=False)
     agent_name: Mapped[str] = mapped_column(String(100), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -93,6 +108,7 @@ class Message(Base):
 
 class AgentRun(Base):
     """Tracks each agentic invocation for observability/MLOps evaluation."""
+
     __tablename__ = "agent_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
@@ -100,7 +116,9 @@ class AgentRun(Base):
     agent_name: Mapped[str] = mapped_column(String(100), nullable=False)
     input_text: Mapped[str] = mapped_column(Text, nullable=False)
     output_text: Mapped[str] = mapped_column(Text, nullable=True)
-    retrieved_doc_ids: Mapped[str] = mapped_column(Text, nullable=True)  # JSON-encoded list
+    retrieved_doc_ids: Mapped[str] = mapped_column(
+        Text, nullable=True
+    )  # JSON-encoded list
     latency_ms: Mapped[int] = mapped_column(nullable=True)
     confidence_score: Mapped[float] = mapped_column(nullable=True)
     escalated: Mapped[bool] = mapped_column(default=False)

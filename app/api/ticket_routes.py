@@ -1,6 +1,7 @@
 """
 Ticket routes — create, list, and fetch support tickets for the current user.
 """
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -44,7 +45,12 @@ def list_tickets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(Ticket).filter(Ticket.user_id == current_user.id).order_by(Ticket.created_at.desc()).all()
+    return (
+        db.query(Ticket)
+        .filter(Ticket.user_id == current_user.id)
+        .order_by(Ticket.created_at.desc())
+        .all()
+    )
 
 
 @router.get("/{ticket_id}", response_model=TicketOut)
@@ -53,7 +59,11 @@ def get_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id, Ticket.user_id == current_user.id).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id, Ticket.user_id == current_user.id)
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
@@ -65,7 +75,11 @@ def get_ticket_messages(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id, Ticket.user_id == current_user.id).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id, Ticket.user_id == current_user.id)
+        .first()
+    )
     if not ticket or not ticket.conversation:
         raise HTTPException(status_code=404, detail="Ticket or conversation not found")
     return ticket.conversation.messages

@@ -1,6 +1,7 @@
 """
 Security utilities: password hashing and JWT token creation/validation.
 """
+
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -20,9 +21,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str, extra_claims: dict[str, Any] | None = None) -> str:
+def create_access_token(
+    subject: str, extra_claims: dict[str, Any] | None = None
+) -> str:
     """Create a signed JWT access token for a given subject (usually user id/email)."""
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.access_token_expire_minutes
+    )
     to_encode: dict[str, Any] = {"sub": subject, "exp": expire}
     if extra_claims:
         to_encode.update(extra_claims)

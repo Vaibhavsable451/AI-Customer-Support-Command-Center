@@ -5,6 +5,7 @@ for offline evaluation and continuous quality monitoring.
 Uses a mix of cheap heuristics (fast, free, always-on) and LLM-as-judge
 (slower, used for deeper/offline evaluation runs).
 """
+
 import json
 import re
 
@@ -16,7 +17,10 @@ logger = get_logger(__name__)
 
 # ---------- Heuristic metrics (no LLM call, fast, run on every request) ----------
 
-def response_length_score(response: str, min_words: int = 10, max_words: int = 300) -> float:
+
+def response_length_score(
+    response: str, min_words: int = 10, max_words: int = 300
+) -> float:
     """Penalize responses that are too short (unhelpful) or too long (verbose)."""
     word_count = len(response.split())
     if word_count < min_words:
@@ -31,11 +35,35 @@ def groundedness_score(response: str, context: str) -> float:
     Cheap proxy for hallucination risk: what fraction of meaningful response
     words also appear in the retrieved context. Not perfect, but a fast signal.
     """
-    if not context or context.strip() == "No relevant knowledge base articles were found.":
+    if (
+        not context
+        or context.strip() == "No relevant knowledge base articles were found."
+    ):
         return 0.5  # neutral — no context to ground against
 
-    stopwords = {"the", "a", "an", "is", "are", "was", "were", "to", "of", "and", "in", "for", "on", "with", "you", "your"}
-    response_words = {w.lower().strip(".,!?") for w in response.split() if w.lower() not in stopwords and len(w) > 3}
+    stopwords = {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "to",
+        "of",
+        "and",
+        "in",
+        "for",
+        "on",
+        "with",
+        "you",
+        "your",
+    }
+    response_words = {
+        w.lower().strip(".,!?")
+        for w in response.split()
+        if w.lower() not in stopwords and len(w) > 3
+    }
     context_words = {w.lower().strip(".,!?") for w in context.split()}
 
     if not response_words:
@@ -85,14 +113,25 @@ def llm_judge_score(user_question: str, context: str, agent_response: str) -> di
         f"AGENT RESPONSE:\n{agent_response}"
     )
 
-    raw, _ = llm.generate(system_prompt=JUDGE_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.0, max_tokens=200)
+    raw, _ = llm.generate(
+        system_prompt=JUDGE_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        temperature=0.0,
+        max_tokens=200,
+    )
 
     try:
         cleaned = raw.strip().strip("`").removeprefix("json").strip()
         scores = json.loads(cleaned)
     except (json.JSONDecodeError, AttributeError):
         logger.warning("llm_judge_parse_failed", raw=raw)
-        scores = {"relevance": 0, "correctness": 0, "helpfulness": 0, "tone": 0, "overall_comment": "parse_failed"}
+        scores = {
+            "relevance": 0,
+            "correctness": 0,
+            "helpfulness": 0,
+            "tone": 0,
+            "overall_comment": "parse_failed",
+        }
 
     return scores
 

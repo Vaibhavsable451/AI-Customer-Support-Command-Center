@@ -2,6 +2,7 @@
 Document chunking utilities — splits long support docs/articles into
 overlapping chunks suitable for embedding and retrieval.
 """
+
 import re
 import uuid
 
@@ -55,15 +56,17 @@ def build_chunk_records(
     chunks = chunk_text(content)
     records = []
     for i, chunk in enumerate(chunks):
-        records.append({
-            "id": f"{uuid.uuid4()}",
-            "text": chunk,
-            "metadata": {
-                "title": title,
-                "category": category or "general",
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-                **metadata,
-            },
-        })
+        records.append(
+            {
+                "id": f"{uuid.uuid4()}",
+                "text": chunk,
+                "metadata": {
+                    "title": title,
+                    "category": category or "general",
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    **metadata,
+                },
+            }
+        )
     return records

@@ -5,6 +5,7 @@ together: Router -> {Knowledge, Support, Billing, Escalation} -> Quality Gate ->
 This is the single entry point the API layer calls to run the full
 multi-agent pipeline for a user message.
 """
+
 import time
 
 from langgraph.graph import END, StateGraph
@@ -79,7 +80,9 @@ def get_agent_graph():
     return _compiled_graph
 
 
-def run_agent_pipeline(ticket_id: str, user_message: str, conversation_history: list[dict] | None = None) -> AgentState:
+def run_agent_pipeline(
+    ticket_id: str, user_message: str, conversation_history: list[dict] | None = None
+) -> AgentState:
     """
     Main entry point: runs the full multi-agent graph for a single user message
     and returns the final state including the response, agent used, confidence, etc.

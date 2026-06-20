@@ -3,6 +3,7 @@ MLflow logging service — records each agent invocation as an MLflow run
 for observability and offline evaluation. Logs heuristic quality metrics
 and prompt version tags alongside core latency/confidence metrics.
 """
+
 import mlflow
 
 from app.core.config import settings
@@ -58,7 +59,9 @@ def log_agent_run(
             mlflow.log_metric("escalated", int(escalated))
             mlflow.log_metric("length_score", heuristics["length_score"])
             mlflow.log_metric("groundedness_score", heuristics["groundedness_score"])
-            mlflow.log_metric("has_unsafe_pattern", int(heuristics["has_unsafe_pattern"]))
+            mlflow.log_metric(
+                "has_unsafe_pattern", int(heuristics["has_unsafe_pattern"])
+            )
 
             mlflow.log_text(user_message, "user_message.txt")
             mlflow.log_text(response, "agent_response.txt")

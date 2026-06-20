@@ -2,6 +2,7 @@
 Groq LLM client — wraps the Groq API with retry/fallback logic for
 fast, low-latency inference used across all agents.
 """
+
 import time
 
 from groq import Groq
@@ -19,8 +20,12 @@ class GroqLLMClient:
         self.primary_model = settings.groq_model
         self.fallback_model = settings.groq_fallback_model
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-    def _call(self, model: str, messages: list[dict], temperature: float, max_tokens: int) -> str:
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8)
+    )
+    def _call(
+        self, model: str, messages: list[dict], temperature: float, max_tokens: int
+    ) -> str:
         completion = self.client.chat.completions.create(
             model=model,
             messages=messages,
@@ -48,7 +53,11 @@ class GroqLLMClient:
         try:
             text = self._call(self.primary_model, messages, temperature, max_tokens)
         except Exception as e:
-            logger.warning("primary_model_failed_falling_back", error=str(e), fallback=self.fallback_model)
+            logger.warning(
+                "primary_model_failed_falling_back",
+                error=str(e),
+                fallback=self.fallback_model,
+            )
             text = self._call(self.fallback_model, messages, temperature, max_tokens)
 
         latency_ms = int((time.time() - start) * 1000)

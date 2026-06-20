@@ -1,6 +1,7 @@
 """
 Database session management for MySQL using SQLAlchemy.
 """
+
 from collections.abc import Generator
 
 from sqlalchemy import create_engine

@@ -1,6 +1,7 @@
 """
 Pydantic request/response schemas for the API layer.
 """
+
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field

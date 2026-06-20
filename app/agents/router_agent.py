@@ -3,6 +3,7 @@ Router Agent — the entry point of the multi-agent graph.
 Classifies the user's intent/category and decides which downstream
 specialized agent should handle the request.
 """
+
 import json
 
 from app.agents.state import AgentState
@@ -37,7 +38,9 @@ def router_node(state: AgentState) -> AgentState:
         last_turns = state["conversation_history"][-3:]
         history_snippet = "\n".join(f"{t['role']}: {t['content']}" for t in last_turns)
 
-    prompt = f"Conversation so far:\n{history_snippet}\n\nLatest message: {user_message}"
+    prompt = (
+        f"Conversation so far:\n{history_snippet}\n\nLatest message: {user_message}"
+    )
 
     raw_response, latency = llm.generate(
         system_prompt=ROUTER_SYSTEM_PROMPT,
@@ -47,7 +50,9 @@ def router_node(state: AgentState) -> AgentState:
     )
 
     try:
-        parsed = json.loads(raw_response.strip().strip("`").removeprefix("json").strip())
+        parsed = json.loads(
+            raw_response.strip().strip("`").removeprefix("json").strip()
+        )
         category = parsed.get("category", "general")
         route = parsed.get("route", "knowledge")
     except (json.JSONDecodeError, AttributeError):
@@ -55,7 +60,13 @@ def router_node(state: AgentState) -> AgentState:
         category, route = "general", "knowledge"
 
     trace = state.get("trace", [])
-    trace.append({"agent": "router", "action": "classify", "detail": f"category={category}, route={route}"})
+    trace.append(
+        {
+            "agent": "router",
+            "action": "classify",
+            "detail": f"category={category}, route={route}",
+        }
+    )
 
     logger.info("router_decision", category=category, route=route, latency_ms=latency)
 

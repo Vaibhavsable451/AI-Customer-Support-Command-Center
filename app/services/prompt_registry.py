@@ -6,6 +6,7 @@ tracked, and A/B tested. This registry gives each prompt a version tag that
 gets logged alongside MLflow runs, so you can correlate quality metrics with
 *which version of the prompt* produced them.
 """
+
 from dataclasses import dataclass
 
 from app.agents.billing_agent import BILLING_SYSTEM_PROMPT
@@ -25,11 +26,21 @@ class PromptVersion:
 # Bump the version string any time a prompt template is edited.
 # This creates an audit trail between prompt changes and downstream quality shifts.
 PROMPT_REGISTRY: dict[str, PromptVersion] = {
-    "router": PromptVersion(name="router", version="v1.0", template=ROUTER_SYSTEM_PROMPT),
-    "knowledge": PromptVersion(name="knowledge", version="v1.0", template=KNOWLEDGE_SYSTEM_PROMPT),
-    "support": PromptVersion(name="support", version="v1.0", template=SUPPORT_SYSTEM_PROMPT),
-    "billing": PromptVersion(name="billing", version="v1.0", template=BILLING_SYSTEM_PROMPT),
-    "escalation": PromptVersion(name="escalation", version="v1.0", template=ESCALATION_SYSTEM_PROMPT),
+    "router": PromptVersion(
+        name="router", version="v1.0", template=ROUTER_SYSTEM_PROMPT
+    ),
+    "knowledge": PromptVersion(
+        name="knowledge", version="v1.0", template=KNOWLEDGE_SYSTEM_PROMPT
+    ),
+    "support": PromptVersion(
+        name="support", version="v1.0", template=SUPPORT_SYSTEM_PROMPT
+    ),
+    "billing": PromptVersion(
+        name="billing", version="v1.0", template=BILLING_SYSTEM_PROMPT
+    ),
+    "escalation": PromptVersion(
+        name="escalation", version="v1.0", template=ESCALATION_SYSTEM_PROMPT
+    ),
 }
 
 

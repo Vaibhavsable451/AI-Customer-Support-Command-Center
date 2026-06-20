@@ -2,6 +2,7 @@
 Knowledge Agent — answers factual/how-to questions using RAG retrieval
 over the support knowledge base (Pinecone).
 """
+
 from app.agents.state import AgentState
 from app.core.logging import get_logger
 from app.rag.retriever import get_retriever
@@ -42,9 +43,16 @@ def knowledge_node(state: AgentState) -> AgentState:
     sources = list({c.source for c in chunks})
 
     trace = state.get("trace", [])
-    trace.append({"agent": "knowledge", "action": "rag_answer", "detail": f"sources={sources}"})
+    trace.append(
+        {"agent": "knowledge", "action": "rag_answer", "detail": f"sources={sources}"}
+    )
 
-    logger.info("knowledge_agent_response", sources=sources, confidence=avg_score, latency_ms=latency)
+    logger.info(
+        "knowledge_agent_response",
+        sources=sources,
+        confidence=avg_score,
+        latency_ms=latency,
+    )
 
     return {
         **state,

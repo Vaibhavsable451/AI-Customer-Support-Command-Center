@@ -2,6 +2,7 @@
 Centralized application configuration.
 Loads from environment variables / .env file using pydantic-settings.
 """
+
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,7 +41,9 @@ class Settings(BaseSettings):
     max_retrieval_docs: int = 5
     similarity_threshold: float = 0.65
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 @lru_cache

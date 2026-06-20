@@ -2,6 +2,7 @@
 Billing Agent — specialized agent for payment, refund, invoice, and
 subscription-related queries. Uses billing tools + RAG context.
 """
+
 import re
 
 from app.agents.state import AgentState
@@ -38,10 +39,16 @@ def billing_node(state: AgentState) -> AgentState:
     if any(kw in query.lower() for kw in ["refund", "money back", "charged"]):
         amount_match = re.search(r"\$?(\d+(?:\.\d{1,2})?)", query)
         amount = float(amount_match.group(1)) if amount_match else 0.0
-        result = TOOL_REGISTRY["create_refund_request"](ticket_id=state.get("ticket_id", "unknown"), amount=amount)
+        result = TOOL_REGISTRY["create_refund_request"](
+            ticket_id=state.get("ticket_id", "unknown"), amount=amount
+        )
         tool_output = f"\n\n[Tool Result — create_refund_request]: {result}"
-    elif any(kw in query.lower() for kw in ["plan", "subscription", "upgrade", "downgrade"]):
-        result = TOOL_REGISTRY["check_subscription_plan"](ticket_id=state.get("ticket_id", "unknown"))
+    elif any(
+        kw in query.lower() for kw in ["plan", "subscription", "upgrade", "downgrade"]
+    ):
+        result = TOOL_REGISTRY["check_subscription_plan"](
+            ticket_id=state.get("ticket_id", "unknown")
+        )
         tool_output = f"\n\n[Tool Result — check_subscription_plan]: {result}"
 
     system_prompt = BILLING_SYSTEM_PROMPT.format(tools=tools_desc, context=context)
@@ -56,7 +63,13 @@ def billing_node(state: AgentState) -> AgentState:
     sources = list({c.source for c in chunks})
 
     trace = state.get("trace", [])
-    trace.append({"agent": "billing", "action": "handle_billing", "detail": f"tool_used={bool(tool_output)}"})
+    trace.append(
+        {
+            "agent": "billing",
+            "action": "handle_billing",
+            "detail": f"tool_used={bool(tool_output)}",
+        }
+    )
 
     return {
         **state,

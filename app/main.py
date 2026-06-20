@@ -2,6 +2,7 @@
 Main FastAPI application entrypoint.
 Wires together all routers, middleware, exception handlers, and startup hooks.
 """
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -24,7 +25,9 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("starting_application", env=settings.app_env, version=settings.app_version)
+    logger.info(
+        "starting_application", env=settings.app_env, version=settings.app_version
+    )
     # Create tables if they don't exist (use Alembic migrations in real production)
     Base.metadata.create_all(bind=engine)
     yield

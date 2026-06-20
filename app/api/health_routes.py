@@ -2,6 +2,7 @@
 Health/readiness routes — used by Kubernetes liveness/readiness probes
 and load balancers.
 """
+
 from fastapi import APIRouter
 from sqlalchemy import text
 
