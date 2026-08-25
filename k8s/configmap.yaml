@@ -14,8 +14,8 @@ data:
 
   # Database — host/port only; credentials come from Secret
   # Groq
-  GROQ_MODEL: "llama-3.3-70b-versatile"
-  GROQ_FALLBACK_MODEL: "llama-3.1-8b-instant"
+  GROQ_MODEL: "openai/gpt-oss-120b"
+  GROQ_FALLBACK_MODEL: "openai/gpt-oss-20b"
 
   # Pinecone
   PINECONE_ENVIRONMENT: "us-east-1"

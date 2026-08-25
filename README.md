@@ -82,7 +82,7 @@ User → POST /api/v1/chat
 |---|---|
 | **API** | FastAPI 0.115, Pydantic v2, Uvicorn |
 | **Agentic AI** | LangGraph 0.2 (state machine), LangChain 0.3 |
-| **LLM** | Groq (`llama-3.3-70b-versatile`, fallback `llama-3.1-8b-instant`) |
+| **LLM** | Groq (`openai/gpt-oss-120b`, fallback `openai/gpt-oss-20b`) |
 | **Vector DB** | Pinecone (serverless) |
 | **Embeddings** | sentence-transformers `all-MiniLM-L6-v2` (384-dim) |
 | **Database** | PostgreSQL 16 + SQLAlchemy 2.0 |
