@@ -25,7 +25,7 @@ def readiness():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         db_ok = True
-    except Exception:
+    except Exception:  # noqa: BLE001
         db_ok = False
 
     status_code = "ok" if db_ok else "degraded"

@@ -52,7 +52,7 @@ class GroqLLMClient:
         start = time.time()
         try:
             text = self._call(self.primary_model, messages, temperature, max_tokens)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 "primary_model_failed_falling_back",
                 error=str(e),

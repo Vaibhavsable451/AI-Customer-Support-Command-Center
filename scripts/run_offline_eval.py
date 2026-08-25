@@ -22,10 +22,10 @@ import mlflow
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.agents.orchestrator import run_agent_pipeline  # noqa: E402
-from app.core.config import settings  # noqa: E402
-from app.core.logging import configure_logging, get_logger  # noqa: E402
-from app.services.prompt_registry import get_all_prompt_versions  # noqa: E402
+from app.agents.orchestrator import run_agent_pipeline
+from app.core.config import settings
+from app.core.logging import configure_logging, get_logger
+from app.services.prompt_registry import get_all_prompt_versions
 
 configure_logging()
 logger = get_logger(__name__)
@@ -143,7 +143,7 @@ def main():
     try:
         log_eval_run_to_mlflow(eval_output)
         print(f"\nLogged to MLflow at {settings.mlflow_tracking_uri}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("mlflow_eval_logging_failed", error=str(e))
         print(f"\n[!] Could not log to MLflow (is the server running?): {e}")
 

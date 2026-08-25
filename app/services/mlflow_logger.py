@@ -67,6 +67,6 @@ def log_agent_run(
             mlflow.log_text(response, "agent_response.txt")
             if retrieved_context:
                 mlflow.log_text(retrieved_context, "retrieved_context.txt")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         # Observability should never break the user-facing request
         logger.warning("mlflow_logging_failed", error=str(e))
