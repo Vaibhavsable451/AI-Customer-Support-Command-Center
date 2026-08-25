@@ -214,7 +214,23 @@ jobs:
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ]; then
+            python - <<'PY'
+          from pathlib import Path
+
+          path = Path.home() / ".kube" / "config"
+          config = path.read_text()
+          public_ip = "${{ vars.EC2_PUBLIC_IP }}"
+          config = config.replace("https://127.0.0.1:6443", f"https://{public_ip}:6443")
+          config = config.replace("https://localhost:6443", f"https://{public_ip}:6443")
+          config = config.replace("https://kubernetes.docker.internal:6443", f"https://{public_ip}:6443")
+          path.write_text(config)
+          PY
+          fi
           chmod 600 $HOME/.kube/config
+
+      - name: Check Kubernetes connection
+        run: kubectl cluster-info
 
       - name: Apply namespace
         run: kubectl apply -f k8s/namespace.yaml
