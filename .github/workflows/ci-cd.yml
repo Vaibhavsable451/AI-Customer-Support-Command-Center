@@ -212,23 +212,15 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          if [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
-            K3S_SERVER="https://${{ vars.EC2_PUBLIC_IP }}:6443"
-            sed -i "s#https://127.0.0.1:6443#$K3S_SERVER#g" $HOME/.kube/config
-            sed -i "s#https://localhost:6443#$K3S_SERVER#g" $HOME/.kube/config
-            sed -i "s#https://kubernetes.docker.internal:6443#$K3S_SERVER#g" $HOME/.kube/config
-          fi
-          if grep -Eq "kubernetes.docker.internal|127.0.0.1:6443|localhost:6443" $HOME/.kube/config; then
-            echo "KUBECONFIG still points to a local-only Kubernetes server."
-            echo "Set repository variable EC2_PUBLIC_IP to your AWS EC2 public IP, or replace the KUBECONFIG secret with the EC2 k3s kubeconfig."
-            exit 1
-          fi
-          chmod 600 $HOME/.kube/config
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
 
-      - name: Check Kubernetes connection
-        run: kubectl cluster-info
+      - name: Test Kubernetes connection
+        run: |
+          kubectl config current-context
+          kubectl cluster-info
+          kubectl get nodes
 
       - name: Apply namespace
         run: kubectl apply -f k8s/namespace.yaml
