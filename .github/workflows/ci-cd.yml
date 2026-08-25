@@ -213,12 +213,16 @@ jobs:
       - name: Configure kubeconfig
         run: |
           mkdir -p "$HOME/.kube"
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+          printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
+
+      - name: Verify kubeconfig
+        run: |
+          kubectl config view --minify
+          kubectl config current-context
 
       - name: Test Kubernetes connection
         run: |
-          kubectl config current-context
           kubectl cluster-info
           kubectl get nodes
 
