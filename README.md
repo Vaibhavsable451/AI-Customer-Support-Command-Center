@@ -179,7 +179,7 @@ cp .env .env   # fill in keys
 uvicorn app.main:app --reload
 # → http://localhost:8000/docs
 ```
-
+Kubernetes deployment enabled.
 ---
 
 ## Key API Endpoints
