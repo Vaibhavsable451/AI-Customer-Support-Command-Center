@@ -200,7 +200,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.ENABLE_K8S_DEPLOY == 'true'
     environment:
       name: production
-      url: https://api.your-domain.com/docs
+      url: ${{ vars.K8S_PROFILE == 'aws-free' && format('http://{0}:30080/docs', vars.EC2_PUBLIC_IP) || 'https://api.your-domain.com/docs' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -227,13 +227,36 @@ jobs:
             --from-literal=GROQ_API_KEY="${{ secrets.GROQ_API_KEY }}" \
             --from-literal=PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
+            --from-literal=MYSQL_ROOT_PASSWORD="${{ secrets.MYSQL_ROOT_PASSWORD }}" \
             --dry-run=client \
             -o yaml | kubectl apply -f -
 
-      - name: Apply config + deployment
+      - name: Apply config
+        run: kubectl apply -f k8s/configmap.yaml
+
+      - name: Apply aws-free database
+        if: vars.K8S_PROFILE == 'aws-free'
         run: |
-          kubectl apply -f k8s/configmap.yaml
-          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/aws-free/mysql.yaml
+          kubectl rollout status deployment/mysql \
+            -n ai-support \
+            --timeout=240s
+
+      - name: Apply API deployment
+        run: kubectl apply -f k8s/deployment.yaml
+
+      - name: Apply aws-free API exposure
+        if: vars.K8S_PROFILE == 'aws-free'
+        run: |
+          kubectl scale deployment/ai-support-api \
+            -n ai-support \
+            --replicas=1
+          kubectl patch deployment ai-support-api \
+            -n ai-support \
+            --type='merge' \
+            -p '{"spec":{"strategy":{"type":"Recreate"},"template":{"spec":{"containers":[{"name":"api","resources":{"requests":{"cpu":"100m","memory":"768Mi"},"limits":{"cpu":"750m","memory":"1400Mi"}}}]}}}}'
+          kubectl apply -f k8s/aws-free/api-nodeport.yaml
 
       - name: Update image tag in deployment
         run: |
@@ -242,17 +265,32 @@ jobs:
             api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
             -n ai-support
 
-      - name: Apply remaining manifests
+      - name: Apply production exposure manifests
+        if: vars.K8S_PROFILE != 'aws-free'
         run: |
           kubectl apply -f k8s/service.yaml
           kubectl apply -f k8s/hpa.yaml
           kubectl apply -f k8s/ingress.yaml
+
+      - name: Apply aws-free frontend
+        if: vars.K8S_PROFILE == 'aws-free'
+        run: |
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/aws-free/frontend.yaml
+          kubectl set image deployment/ai-support-frontend \
+            frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
+            -n ai-support
 
       - name: Wait for rollout
         run: |
           kubectl rollout status deployment/ai-support-api \
             -n ai-support \
             --timeout=180s
+          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ]; then
+            kubectl rollout status deployment/ai-support-frontend \
+              -n ai-support \
+              --timeout=180s
+          fi
 
       - name: Smoke test (readiness probe)
         run: |
@@ -268,4 +306,8 @@ jobs:
           echo "### Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ]; then
+            echo "**API:** http://${{ vars.EC2_PUBLIC_IP }}:30080/docs" >> $GITHUB_STEP_SUMMARY
+            echo "**Frontend:** http://${{ vars.EC2_PUBLIC_IP }}:30085" >> $GITHUB_STEP_SUMMARY
+          fi
           kubectl get pods -n ai-support >> $GITHUB_STEP_SUMMARY
