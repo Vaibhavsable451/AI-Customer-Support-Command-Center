@@ -8,20 +8,20 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true      # cancel stale PR runs when new commits arrive
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}   # e.g. your-org/ai-support-platform
+  IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: "3.11"
 
-# ══════════════════════════════════════════════════════════════════════════════
 jobs:
 
-  # ── 1. Lint ─────────────────────────────────────────────────────────────────
+  # ── 1. Lint ────────────────────────────────────────────────────────────────
   lint:
     name: Lint (ruff + mypy)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +42,8 @@ jobs:
       - name: mypy (strict on core modules)
         run: mypy app/core/ app/schemas/ --ignore-missing-imports
 
-  # ── 2. Test ──────────────────────────────────────────────────────────────────
+
+  # ── 2. Test ────────────────────────────────────────────────────────────────
   test:
     name: Unit + Integration tests
     runs-on: ubuntu-latest
@@ -67,7 +68,7 @@ jobs:
     env:
       DATABASE_URL: mysql+pymysql://support_user:support_pass@localhost:3306/support_db
       SECRET_KEY: ci-test-secret-key-not-for-production
-      GROQ_API_KEY: stub          # tests mock the LLM client
+      GROQ_API_KEY: stub
       PINECONE_API_KEY: stub
       APP_ENV: test
       PYTHONPATH: ${{ github.workspace }}
@@ -98,19 +99,20 @@ jobs:
           name: test-results
           path: test-results.xml
 
-  # ── 3. Offline eval (regression gate) ───────────────────────────────────────
+
+  # ── 3. Offline eval ───────────────────────────────────────────────────────
   eval:
     name: Offline eval (routing accuracy gate)
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push'   # only on direct pushes, not every PR
+    if: github.event_name == 'push'
 
     env:
-      DATABASE_URL: sqlite:///./eval.db    # lightweight for eval
+      DATABASE_URL: sqlite:///./eval.db
       SECRET_KEY: ci-eval-secret
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-      MLFLOW_TRACKING_URI: ./mlruns        # local filesystem — no server needed
+      MLFLOW_TRACKING_URI: ./mlruns
       APP_ENV: ci
       PYTHONPATH: ${{ github.workspace }}
 
@@ -127,7 +129,6 @@ jobs:
 
       - name: Run offline evaluation
         run: python scripts/run_offline_eval.py
-        # Script exits non-zero if routing accuracy < 70% (see scripts/run_offline_eval.py)
 
       - name: Upload MLflow artifacts
         if: always()
@@ -136,12 +137,15 @@ jobs:
           name: mlflow-eval-run
           path: mlruns/
 
-  # ── 4. Build & push Docker image ─────────────────────────────────────────────
+
+  # ── 4. Build & push Docker image ──────────────────────────────────────────
   build:
     name: Build & push image
     runs-on: ubuntu-latest
     needs: [test]
+
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
     permissions:
       contents: read
       packages: write
@@ -192,43 +196,72 @@ jobs:
           echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "**Digest:** ${{ steps.push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
 
-  # ── 5. Deploy to Kubernetes ───────────────────────────────────────────────────
+
+  # ── 5. Deploy to Kubernetes ───────────────────────────────────────────────
   deploy:
     name: Deploy to K8s
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.ENABLE_K8S_DEPLOY == 'true'
+
+    if: >
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      vars.ENABLE_K8S_DEPLOY == 'true'
+
     environment:
       name: production
       url: ${{ vars.EC2_PUBLIC_IP != '' && format('http://{0}:30080/docs', vars.EC2_PUBLIC_IP) || 'https://api.your-domain.com/docs' }}
 
     steps:
+
+      # ── Checkout ──────────────────────────────────────────────────────────
       - uses: actions/checkout@v4
 
+
+      # ── kubectl ────────────────────────────────────────────────────────────
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: "v1.30.0"
 
+
+      # ── Kubeconfig ─────────────────────────────────────────────────────────
       - name: Configure kubeconfig
         run: |
           mkdir -p "$HOME/.kube"
-          printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+
+          printf '%s' "${{ secrets.KUBE_CONFIG }}" \
+            | base64 --decode \
+            > "$HOME/.kube/config"
+
           chmod 600 "$HOME/.kube/config"
 
+
+      # ── Verify kubeconfig ─────────────────────────────────────────────────
       - name: Verify kubeconfig
         run: |
-          kubectl config view --minify
+          echo "Current Kubernetes context:"
           kubectl config current-context
 
+          echo "Kubernetes API server:"
+          kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
+          echo
+
+
+      # ── Test connection ───────────────────────────────────────────────────
       - name: Test Kubernetes connection
         run: |
           kubectl cluster-info
           kubectl get nodes
 
-      - name: Apply namespace
-        run: kubectl apply -f k8s/namespace.yaml
 
+      # ── Namespace ─────────────────────────────────────────────────────────
+      - name: Apply namespace
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+
+
+      # ── Production secrets ────────────────────────────────────────────────
       - name: Apply production secrets
         run: |
           kubectl create secret generic ai-support-secrets \
@@ -240,41 +273,64 @@ jobs:
             --from-literal=MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
             --from-literal=MYSQL_ROOT_PASSWORD="${{ secrets.MYSQL_ROOT_PASSWORD }}" \
             --dry-run=client \
-            -o yaml | kubectl apply -f -
+            -o yaml \
+            | kubectl apply -f -
 
+
+      # ── ConfigMap ─────────────────────────────────────────────────────────
       - name: Apply config
-        run: kubectl apply -f k8s/configmap.yaml
+        run: |
+          kubectl apply -f k8s/configmap.yaml
 
+
+      # ── MySQL ─────────────────────────────────────────────────────────────
       - name: Apply aws-free database
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           kubectl apply -f k8s/aws-free/mysql.yaml
+
           kubectl rollout status deployment/mysql \
             -n ai-support \
             --timeout=240s
 
-      - name: Apply API deployment
-        run: kubectl apply -f k8s/deployment.yaml
 
-      - name: Apply aws-free API exposure
+      # ── API deployment ────────────────────────────────────────────────────
+      - name: Apply API deployment
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+
+
+      # ── AWS FREE API configuration ───────────────────────────────────────
+      - name: Configure aws-free API
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
+          echo "Configuring API deployment for AWS free-tier EC2..."
+
+          # Scale API to one replica
           kubectl scale deployment/ai-support-api \
             -n ai-support \
             --replicas=1
+
+          # Use Recreate strategy.
+          # rollingUpdate MUST be removed when strategy is Recreate.
           kubectl patch deployment ai-support-api \
             -n ai-support \
             --type='merge' \
-            -p '{"spec":{"strategy":{"type":"Recreate"},"template":{"spec":{"containers":[{"name":"api","resources":{"requests":{"cpu":"100m","memory":"768Mi"},"limits":{"cpu":"750m","memory":"1400Mi"}}}]}}}}'
+            -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+
+          # Expose API through NodePort
           kubectl apply -f k8s/aws-free/api-nodeport.yaml
 
-      - name: Update image tag in deployment
+
+      # ── Update API image ──────────────────────────────────────────────────
+      - name: Update API image
         run: |
-          # Patch the deployment image to the exact SHA digest produced by the build job
           kubectl set image deployment/ai-support-api \
             api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
             -n ai-support
 
+
+      # ── Production exposure ───────────────────────────────────────────────
       - name: Apply production exposure manifests
         if: vars.K8S_PROFILE != 'aws-free' && vars.EC2_PUBLIC_IP == ''
         run: |
@@ -282,42 +338,69 @@ jobs:
           kubectl apply -f k8s/hpa.yaml
           kubectl apply -f k8s/ingress.yaml
 
+
+      # ── AWS FREE frontend ─────────────────────────────────────────────────
       - name: Apply aws-free frontend
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           kubectl apply -f k8s/service.yaml
+
           kubectl apply -f k8s/aws-free/frontend.yaml
+
           kubectl set image deployment/ai-support-frontend \
             frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
             -n ai-support
 
+
+      # ── Wait for rollout ──────────────────────────────────────────────────
       - name: Wait for rollout
         run: |
           kubectl rollout status deployment/ai-support-api \
             -n ai-support \
             --timeout=180s
+
           if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
             kubectl rollout status deployment/ai-support-frontend \
               -n ai-support \
               --timeout=180s
           fi
 
+
+      # ── Smoke test ────────────────────────────────────────────────────────
       - name: Smoke test (readiness probe)
         run: |
-          # Port-forward for a quick smoke test without exposing the cluster
           kubectl port-forward svc/ai-support-api-svc 8080:80 -n ai-support &
+          PORT_FORWARD_PID=$!
+
+          trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
+
           sleep 5
-          curl -sf http://localhost:8080/health || (echo "Smoke test failed" && exit 1)
-          curl -sf http://localhost:8080/ready  || (echo "Readiness check failed" && exit 1)
+
+          curl -sf http://localhost:8080/health \
+            || (echo "Smoke test failed" && exit 1)
+
+          curl -sf http://localhost:8080/ready \
+            || (echo "Readiness check failed" && exit 1)
+
           echo "✅ Deployment smoke test passed"
 
+
+      # ── Deployment summary ────────────────────────────────────────────────
       - name: Deployment summary
         run: |
           echo "### Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" >> $GITHUB_STEP_SUMMARY
+
           if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
             echo "**API:** http://${{ vars.EC2_PUBLIC_IP }}:30080/docs" >> $GITHUB_STEP_SUMMARY
             echo "**Frontend:** http://${{ vars.EC2_PUBLIC_IP }}:30085" >> $GITHUB_STEP_SUMMARY
           fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pods" >> $GITHUB_STEP_SUMMARY
           kubectl get pods -n ai-support >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Services" >> $GITHUB_STEP_SUMMARY
+          kubectl get svc -n ai-support >> $GITHUB_STEP_SUMMARY
