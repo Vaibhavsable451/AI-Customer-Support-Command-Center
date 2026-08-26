@@ -12,12 +12,14 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: vaibhavsable451/ai-customer-support-command-center
   PYTHON_VERSION: "3.11"
 
 jobs:
 
-  # ── 1. Lint ────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. LINT
+  # ──────────────────────────────────────────────────────────────────────────
   lint:
     name: Lint (ruff + mypy)
     runs-on: ubuntu-latest
@@ -33,17 +35,19 @@ jobs:
       - name: Install lint tools
         run: pip install ruff mypy types-passlib
 
-      - name: ruff check
+      - name: Ruff check
         run: ruff check app/ scripts/ --output-format=github
 
-      - name: ruff format check
+      - name: Ruff format check
         run: ruff format app/ scripts/ --check
 
-      - name: mypy (strict on core modules)
+      - name: Mypy
         run: mypy app/core/ app/schemas/ --ignore-missing-imports
 
 
-  # ── 2. Test ────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. TEST
+  # ──────────────────────────────────────────────────────────────────────────
   test:
     name: Unit + Integration tests
     runs-on: ubuntu-latest
@@ -52,13 +56,16 @@ jobs:
     services:
       mysql:
         image: mysql:8.0
+
         env:
           MYSQL_USER: support_user
           MYSQL_PASSWORD: support_pass
           MYSQL_DATABASE: support_db
           MYSQL_ROOT_PASSWORD: root_pass
+
         ports:
           - 3306:3306
+
         options: >-
           --health-cmd "mysqladmin ping -h localhost -u support_user -psupport_pass"
           --health-interval 10s
@@ -100,11 +107,14 @@ jobs:
           path: test-results.xml
 
 
-  # ── 3. Offline eval ───────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. OFFLINE EVALUATION
+  # ──────────────────────────────────────────────────────────────────────────
   eval:
     name: Offline eval (routing accuracy gate)
     runs-on: ubuntu-latest
     needs: test
+
     if: github.event_name == 'push'
 
     env:
@@ -138,11 +148,15 @@ jobs:
           path: mlruns/
 
 
-  # ── 4. Build & push Docker image ──────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4. BUILD AND PUSH
+  # ──────────────────────────────────────────────────────────────────────────
   build:
-    name: Build & push image
+    name: Build & push Docker image
     runs-on: ubuntu-latest
-    needs: [test]
+
+    needs:
+      - test
 
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
@@ -160,7 +174,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -172,35 +186,44 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
           tags: |
             type=sha,prefix=sha-,format=short
             type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push
+      - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@v6
+
         with:
           context: .
           file: Dockerfile
           push: true
+
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
           platforms: linux/amd64
 
-      - name: Output image info
+      - name: Output image information
         run: |
-          echo "### Docker Image Built 🐳" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Digest:** ${{ steps.push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Image Built 🐳" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Digest:** ${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
 
-  # ── 5. Deploy to Kubernetes ───────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # 5. DEPLOY TO KUBERNETES
+  # ──────────────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to K8s
     runs-on: ubuntu-latest
+
     needs: build
 
     if: >
@@ -210,24 +233,37 @@ jobs:
 
     environment:
       name: production
-      url: ${{ vars.EC2_PUBLIC_IP != '' && format('http://{0}:30080/docs', vars.EC2_PUBLIC_IP) || 'https://api.your-domain.com/docs' }}
+
+      url: ${{ vars.EC2_PUBLIC_IP != '' &&
+        format('http://{0}:30080/docs', vars.EC2_PUBLIC_IP) ||
+        'https://api.your-domain.com/docs' }}
 
     steps:
 
-      # ── Checkout ──────────────────────────────────────────────────────────
-      - uses: actions/checkout@v4
+      # ─────────────────────────────────────────────────────────────────────
+      # CHECKOUT
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
 
-      # ── kubectl ────────────────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # KUBECTL
+      # ─────────────────────────────────────────────────────────────────────
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: "v1.30.0"
 
 
-      # ── Kubeconfig ─────────────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # KUBECONFIG
+      # ─────────────────────────────────────────────────────────────────────
       - name: Configure kubeconfig
+        shell: bash
         run: |
+          set -e
+
           mkdir -p "$HOME/.kube"
 
           printf '%s' "${{ secrets.KUBE_CONFIG }}" \
@@ -236,32 +272,45 @@ jobs:
 
           chmod 600 "$HOME/.kube/config"
 
+          echo "Kubeconfig created successfully."
 
-      # ── Verify kubeconfig ─────────────────────────────────────────────────
+
+      # ─────────────────────────────────────────────────────────────────────
+      # VERIFY KUBECONFIG
+      # ─────────────────────────────────────────────────────────────────────
       - name: Verify kubeconfig
         run: |
           echo "Current Kubernetes context:"
           kubectl config current-context
 
           echo "Kubernetes API server:"
-          kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
+          kubectl config view \
+            --minify \
+            -o jsonpath='{.clusters[0].cluster.server}'
+
           echo
 
 
-      # ── Test connection ───────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # TEST K8S CONNECTION
+      # ─────────────────────────────────────────────────────────────────────
       - name: Test Kubernetes connection
         run: |
           kubectl cluster-info
           kubectl get nodes
 
 
-      # ── Namespace ─────────────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # NAMESPACE
+      # ─────────────────────────────────────────────────────────────────────
       - name: Apply namespace
         run: |
           kubectl apply -f k8s/namespace.yaml
 
 
-      # ── Production secrets ────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # SECRETS
+      # ─────────────────────────────────────────────────────────────────────
       - name: Apply production secrets
         run: |
           kubectl create secret generic ai-support-secrets \
@@ -277,14 +326,18 @@ jobs:
             | kubectl apply -f -
 
 
-      # ── ConfigMap ─────────────────────────────────────────────────────────
-      - name: Apply config
+      # ─────────────────────────────────────────────────────────────────────
+      # CONFIGMAP
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Apply ConfigMap
         run: |
           kubectl apply -f k8s/configmap.yaml
 
 
-      # ── MySQL ─────────────────────────────────────────────────────────────
-      - name: Apply aws-free database
+      # ─────────────────────────────────────────────────────────────────────
+      # MYSQL
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Deploy MySQL
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           kubectl apply -f k8s/aws-free/mysql.yaml
@@ -294,44 +347,53 @@ jobs:
             --timeout=240s
 
 
-      # ── API deployment ────────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # API DEPLOYMENT
+      # ─────────────────────────────────────────────────────────────────────
       - name: Apply API deployment
         run: |
           kubectl apply -f k8s/deployment.yaml
 
 
-      # ── AWS FREE API configuration ───────────────────────────────────────
-      - name: Configure aws-free API
+      # ─────────────────────────────────────────────────────────────────────
+      # AWS FREE API CONFIGURATION
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Configure AWS free-tier API
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
-          echo "Configuring API deployment for AWS free-tier EC2..."
+          echo "Configuring API for AWS free-tier EC2..."
 
-          # Scale API to one replica
           kubectl scale deployment/ai-support-api \
             -n ai-support \
             --replicas=1
 
-          # Use Recreate strategy.
-          # rollingUpdate MUST be removed when strategy is Recreate.
           kubectl patch deployment ai-support-api \
             -n ai-support \
             --type='merge' \
             -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
 
-          # Expose API through NodePort
           kubectl apply -f k8s/aws-free/api-nodeport.yaml
 
 
-      # ── Update API image ──────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # API IMAGE
+      # ─────────────────────────────────────────────────────────────────────
       - name: Update API image
         run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }}"
+
+          echo "Deploying API image:"
+          echo "$IMAGE"
+
           kubectl set image deployment/ai-support-api \
-            api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
+            api="$IMAGE" \
             -n ai-support
 
 
-      # ── Production exposure ───────────────────────────────────────────────
-      - name: Apply production exposure manifests
+      # ─────────────────────────────────────────────────────────────────────
+      # PRODUCTION EXPOSURE
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Apply production exposure
         if: vars.K8S_PROFILE != 'aws-free' && vars.EC2_PUBLIC_IP == ''
         run: |
           kubectl apply -f k8s/service.yaml
@@ -339,37 +401,91 @@ jobs:
           kubectl apply -f k8s/ingress.yaml
 
 
-      # ── AWS FREE frontend ─────────────────────────────────────────────────
-      - name: Apply aws-free frontend
+      # ─────────────────────────────────────────────────────────────────────
+      # FRONTEND
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Deploy frontend
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           kubectl apply -f k8s/service.yaml
 
           kubectl apply -f k8s/aws-free/frontend.yaml
 
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }}"
+
+          echo "Deploying frontend image:"
+          echo "$IMAGE"
+
           kubectl set image deployment/ai-support-frontend \
-            frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }} \
+            frontend="$IMAGE" \
             -n ai-support
 
 
-      # ── Wait for rollout ──────────────────────────────────────────────────
-      - name: Wait for rollout
+      # ─────────────────────────────────────────────────────────────────────
+      # WAIT FOR API
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Wait for API rollout
         run: |
           kubectl rollout status deployment/ai-support-api \
             -n ai-support \
             --timeout=180s
 
-          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
-            kubectl rollout status deployment/ai-support-frontend \
-              -n ai-support \
-              --timeout=180s
-          fi
 
-
-      # ── Smoke test ────────────────────────────────────────────────────────
-      - name: Smoke test (readiness probe)
+      # ─────────────────────────────────────────────────────────────────────
+      # WAIT FOR FRONTEND
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Wait for frontend rollout
+        if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
-          kubectl port-forward svc/ai-support-api-svc 8080:80 -n ai-support &
+          kubectl rollout status deployment/ai-support-frontend \
+            -n ai-support \
+            --timeout=180s
+
+
+      # ─────────────────────────────────────────────────────────────────────
+      # DEBUG IF ROLLOUT FAILS
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Kubernetes diagnostics
+        if: failure()
+        run: |
+          echo "===== PODS ====="
+          kubectl get pods -n ai-support -o wide
+
+          echo "===== DEPLOYMENTS ====="
+          kubectl get deployments -n ai-support
+
+          echo "===== SERVICES ====="
+          kubectl get services -n ai-support
+
+          echo "===== EVENTS ====="
+          kubectl get events \
+            -n ai-support \
+            --sort-by=.lastTimestamp | tail -50
+
+          echo "===== API DESCRIBE ====="
+          kubectl describe deployment ai-support-api \
+            -n ai-support || true
+
+          echo "===== FRONTEND DESCRIBE ====="
+          kubectl describe deployment ai-support-frontend \
+            -n ai-support || true
+
+          echo "===== API POD LOGS ====="
+          kubectl logs deployment/ai-support-api \
+            -n ai-support \
+            --tail=100 || true
+
+
+      # ─────────────────────────────────────────────────────────────────────
+      # SMOKE TEST
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Smoke test
+        run: |
+          kubectl port-forward \
+            svc/ai-support-api-svc \
+            8080:80 \
+            -n ai-support &
+
           PORT_FORWARD_PID=$!
 
           trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
@@ -385,22 +501,42 @@ jobs:
           echo "✅ Deployment smoke test passed"
 
 
-      # ── Deployment summary ────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────────────
+      # DEPLOYMENT SUMMARY
+      # ─────────────────────────────────────────────────────────────────────
       - name: Deployment summary
         run: |
-          echo "### Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Complete 🚀" >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
-            echo "**API:** http://${{ vars.EC2_PUBLIC_IP }}:30080/docs" >> $GITHUB_STEP_SUMMARY
-            echo "**Frontend:** http://${{ vars.EC2_PUBLIC_IP }}:30085" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+          echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Pods" >> "$GITHUB_STEP_SUMMARY"
+          kubectl get pods -n ai-support \
+            >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Services" >> "$GITHUB_STEP_SUMMARY"
+          kubectl get svc -n ai-support \
+            >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || \
+             [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
+
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            echo "**API:** http://${{ vars.EC2_PUBLIC_IP }}:30080/docs" \
+              >> "$GITHUB_STEP_SUMMARY"
+
+            echo "**Frontend:** http://${{ vars.EC2_PUBLIC_IP }}:30085" \
+              >> "$GITHUB_STEP_SUMMARY"
           fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Pods" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -n ai-support >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Services" >> $GITHUB_STEP_SUMMARY
-          kubectl get svc -n ai-support >> $GITHUB_STEP_SUMMARY
