@@ -17,37 +17,43 @@ env:
 
 jobs:
 
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   # 1. LINT
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   lint:
     name: Lint (ruff + mypy)
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
       - name: Install lint tools
-        run: pip install ruff mypy types-passlib
+        run: |
+          pip install ruff mypy types-passlib
 
       - name: Ruff check
-        run: ruff check app/ scripts/ --output-format=github
+        run: |
+          ruff check app/ scripts/ --output-format=github
 
       - name: Ruff format check
-        run: ruff format app/ scripts/ --check
+        run: |
+          ruff format app/ scripts/ --check
 
       - name: Mypy
-        run: mypy app/core/ app/schemas/ --ignore-missing-imports
+        run: |
+          mypy app/core/ app/schemas/ --ignore-missing-imports
 
 
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   # 2. TEST
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   test:
     name: Unit + Integration tests
     runs-on: ubuntu-latest
@@ -81,15 +87,18 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
       - name: Run pytest
         run: |
@@ -100,16 +109,16 @@ jobs:
             --junitxml=test-results.xml
 
       - name: Upload test results
-        if: always()
+        if: always() && hashFiles('test-results.xml') != ''
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: test-results.xml
 
 
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   # 3. OFFLINE EVALUATION
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   eval:
     name: Offline eval (routing accuracy gate)
     runs-on: ubuntu-latest
@@ -127,36 +136,38 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
       - name: Run offline evaluation
-        run: python scripts/run_offline_eval.py
+        run: |
+          python scripts/run_offline_eval.py
 
       - name: Upload MLflow artifacts
-        if: always()
+        if: always() && hashFiles('mlruns/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: mlflow-eval-run
           path: mlruns/
 
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # 4. BUILD AND PUSH
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
+  # 4. BUILD & PUSH DOCKER IMAGE
+  # ============================================================
   build:
-    name: Build & push Docker image
+    name: Build & push image
     runs-on: ubuntu-latest
-
-    needs:
-      - test
+    needs: test
 
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
@@ -166,12 +177,12 @@ jobs:
 
     outputs:
       image-digest: ${{ steps.push.outputs.digest }}
-      image-tag: ${{ steps.meta.outputs.tags }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
@@ -181,49 +192,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
           tags: |
             type=sha,prefix=sha-,format=short
             type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push Docker image
+      - name: Build and push
         id: push
         uses: docker/build-push-action@v6
-
         with:
           context: .
           file: Dockerfile
           push: true
-
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
           platforms: linux/amd64
 
-      - name: Output image information
+      - name: Image information
         run: |
-          echo "### Docker Image Built 🐳" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Docker Image Built" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
           echo "**Digest:** ${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
 
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   # 5. DEPLOY TO KUBERNETES
-  # ──────────────────────────────────────────────────────────────────────────
+  # ============================================================
   deploy:
     name: Deploy to K8s
     runs-on: ubuntu-latest
-
     needs: build
 
     if: >
@@ -233,37 +238,31 @@ jobs:
 
     environment:
       name: production
-
-      url: ${{ vars.EC2_PUBLIC_IP != '' &&
-        format('http://{0}:30080/docs', vars.EC2_PUBLIC_IP) ||
-        'https://api.your-domain.com/docs' }}
+      url: ${{ vars.EC2_PUBLIC_IP != '' && format('http://{0}:30080/docs', vars.EC2_PUBLIC_IP) || 'https://api.your-domain.com/docs' }}
 
     steps:
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # CHECKOUT
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Checkout repository
+      # ========================================================
+      - name: Checkout
         uses: actions/checkout@v4
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # KUBECTL
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Set up kubectl
+      # ========================================================
+      - name: Setup kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: "v1.30.0"
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # KUBECONFIG
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Configure kubeconfig
-        shell: bash
         run: |
-          set -e
-
           mkdir -p "$HOME/.kube"
 
           printf '%s' "${{ secrets.KUBE_CONFIG }}" \
@@ -272,18 +271,16 @@ jobs:
 
           chmod 600 "$HOME/.kube/config"
 
-          echo "Kubeconfig created successfully."
 
-
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # VERIFY KUBECONFIG
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Verify kubeconfig
         run: |
-          echo "Current Kubernetes context:"
+          echo "Current context:"
           kubectl config current-context
 
-          echo "Kubernetes API server:"
+          echo "API server:"
           kubectl config view \
             --minify \
             -o jsonpath='{.clusters[0].cluster.server}'
@@ -291,26 +288,26 @@ jobs:
           echo
 
 
-      # ─────────────────────────────────────────────────────────────────────
-      # TEST K8S CONNECTION
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
+      # TEST KUBERNETES CONNECTION
+      # ========================================================
       - name: Test Kubernetes connection
         run: |
           kubectl cluster-info
           kubectl get nodes
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # NAMESPACE
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Apply namespace
         run: |
           kubectl apply -f k8s/namespace.yaml
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # SECRETS
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Apply production secrets
         run: |
           kubectl create secret generic ai-support-secrets \
@@ -326,18 +323,18 @@ jobs:
             | kubectl apply -f -
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # CONFIGMAP
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Apply ConfigMap
+      # ========================================================
+      - name: Apply configmap
         run: |
           kubectl apply -f k8s/configmap.yaml
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # MYSQL
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Deploy MySQL
+      # ========================================================
+      - name: Apply MySQL
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           kubectl apply -f k8s/aws-free/mysql.yaml
@@ -347,18 +344,18 @@ jobs:
             --timeout=240s
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # API DEPLOYMENT
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Apply API deployment
         run: |
           kubectl apply -f k8s/deployment.yaml
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # AWS FREE API CONFIGURATION
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Configure AWS free-tier API
+      # ========================================================
+      - name: Configure API for AWS free tier
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           echo "Configuring API for AWS free-tier EC2..."
@@ -375,9 +372,9 @@ jobs:
           kubectl apply -f k8s/aws-free/api-nodeport.yaml
 
 
-      # ─────────────────────────────────────────────────────────────────────
-      # API IMAGE
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
+      # UPDATE API IMAGE
+      # ========================================================
       - name: Update API image
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.image-digest }}"
@@ -390,9 +387,9 @@ jobs:
             -n ai-support
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # PRODUCTION EXPOSURE
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Apply production exposure
         if: vars.K8S_PROFILE != 'aws-free' && vars.EC2_PUBLIC_IP == ''
         run: |
@@ -401,10 +398,10 @@ jobs:
           kubectl apply -f k8s/ingress.yaml
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # FRONTEND
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Deploy frontend
+      # ========================================================
+      - name: Apply frontend
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
           kubectl apply -f k8s/service.yaml
@@ -421,9 +418,30 @@ jobs:
             -n ai-support
 
 
-      # ─────────────────────────────────────────────────────────────────────
-      # WAIT FOR API
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
+      # SHOW DEPLOYMENT STATE BEFORE ROLLOUT
+      # ========================================================
+      - name: Show deployment state
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deployments -n ai-support
+
+          echo ""
+          echo "=== Pods ==="
+          kubectl get pods -n ai-support -o wide
+
+          echo ""
+          echo "=== Images ==="
+          kubectl get deployment ai-support-api \
+            -n ai-support \
+            -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+          echo
+
+
+      # ========================================================
+      # WAIT FOR API ROLLOUT
+      # ========================================================
       - name: Wait for API rollout
         run: |
           kubectl rollout status deployment/ai-support-api \
@@ -431,9 +449,9 @@ jobs:
             --timeout=180s
 
 
-      # ─────────────────────────────────────────────────────────────────────
-      # WAIT FOR FRONTEND
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
+      # WAIT FOR FRONTEND ROLLOUT
+      # ========================================================
       - name: Wait for frontend rollout
         if: vars.K8S_PROFILE == 'aws-free' || vars.EC2_PUBLIC_IP != ''
         run: |
@@ -442,101 +460,72 @@ jobs:
             --timeout=180s
 
 
-      # ─────────────────────────────────────────────────────────────────────
-      # DEBUG IF ROLLOUT FAILS
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Kubernetes diagnostics
-        if: failure()
-        run: |
-          echo "===== PODS ====="
-          kubectl get pods -n ai-support -o wide
-
-          echo "===== DEPLOYMENTS ====="
-          kubectl get deployments -n ai-support
-
-          echo "===== SERVICES ====="
-          kubectl get services -n ai-support
-
-          echo "===== EVENTS ====="
-          kubectl get events \
-            -n ai-support \
-            --sort-by=.lastTimestamp | tail -50
-
-          echo "===== API DESCRIBE ====="
-          kubectl describe deployment ai-support-api \
-            -n ai-support || true
-
-          echo "===== FRONTEND DESCRIBE ====="
-          kubectl describe deployment ai-support-frontend \
-            -n ai-support || true
-
-          echo "===== API POD LOGS ====="
-          kubectl logs deployment/ai-support-api \
-            -n ai-support \
-            --tail=100 || true
-
-
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # SMOKE TEST
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Smoke test
         run: |
           kubectl port-forward \
             svc/ai-support-api-svc \
             8080:80 \
-            -n ai-support &
+            -n ai-support > /tmp/port-forward.log 2>&1 &
 
           PORT_FORWARD_PID=$!
 
           trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
 
+          echo "Waiting for port-forward..."
           sleep 5
 
+          echo "Testing /health..."
           curl -sf http://localhost:8080/health \
-            || (echo "Smoke test failed" && exit 1)
+            || {
+              echo "Smoke test failed"
+              cat /tmp/port-forward.log
+              exit 1
+            }
 
+          echo "Testing /ready..."
           curl -sf http://localhost:8080/ready \
-            || (echo "Readiness check failed" && exit 1)
+            || {
+              echo "Readiness check failed"
+              cat /tmp/port-forward.log
+              exit 1
+            }
 
-          echo "✅ Deployment smoke test passed"
+          echo "Deployment smoke test passed"
 
 
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       # DEPLOYMENT SUMMARY
-      # ─────────────────────────────────────────────────────────────────────
+      # ========================================================
       - name: Deployment summary
+        if: always()
         run: |
-          echo "### Deployment Complete 🚀" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "**Commit:** ${{ github.sha }}" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-          echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" \
-            >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "**Image digest:** ${{ needs.build.outputs.image-digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Pods" >> "$GITHUB_STEP_SUMMARY"
-          kubectl get pods -n ai-support \
-            >> "$GITHUB_STEP_SUMMARY"
+
+          kubectl get pods \
+            -n ai-support \
+            -o wide >> "$GITHUB_STEP_SUMMARY" || true
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
-
           echo "### Services" >> "$GITHUB_STEP_SUMMARY"
-          kubectl get svc -n ai-support \
-            >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || \
-             [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
+          kubectl get svc \
+            -n ai-support >> "$GITHUB_STEP_SUMMARY" || true
 
+          if [ "${{ vars.K8S_PROFILE }}" = "aws-free" ] || [ -n "${{ vars.EC2_PUBLIC_IP }}" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
-
-            echo "**API:** http://${{ vars.EC2_PUBLIC_IP }}:30080/docs" \
-              >> "$GITHUB_STEP_SUMMARY"
-
-            echo "**Frontend:** http://${{ vars.EC2_PUBLIC_IP }}:30085" \
-              >> "$GITHUB_STEP_SUMMARY"
+            echo "**API:** http://${{ vars.EC2_PUBLIC_IP }}:30080/docs" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Frontend:** http://${{ vars.EC2_PUBLIC_IP }}:30085" >> "$GITHUB_STEP_SUMMARY"
           fi
